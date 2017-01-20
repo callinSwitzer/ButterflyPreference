@@ -8,9 +8,15 @@
 # .csv (data) files
 *.csv
 
+
+
 # ms word
 *.docx
 *.doc
+
+# ms excel
+*.xls
+*.xlsx
 
 # Session Data files
 .RData
