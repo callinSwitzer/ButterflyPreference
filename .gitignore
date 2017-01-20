@@ -8,6 +8,8 @@
 # .csv (data) files
 *.csv
 
+# R project file
+*.Rproj
 
 
 # ms word
