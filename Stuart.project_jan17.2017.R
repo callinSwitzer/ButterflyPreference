@@ -3,6 +3,13 @@
 # Update to previously written code by
 # Heather and Stuart
 
+
+# Questions that we want to ask
+# 1)	Is there preference for color (lb vs dr, lb vs db, lb vs lr)?
+# 2)	Does the preference for color change with context of array (drum vs drum, drum vs drum with cusp, cusp vs. drum)?
+# 3)	Do the two pollinators vary in their preferences? 
+
+
 # load packages:
 ipak <- function(pkg){
      new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
@@ -37,9 +44,14 @@ all<-read.csv("Batt.skip.Stuart.csv",header=TRUE, sep=",", dec = ".")
 
 #__________________________________________________________________
 #Battus
+batLR <- battus.2[battus.2$Array_type == "LR",]
+colnames(batLR)
+
+batLR <- batLR[,c('Year', 'Array_type', 'ALB_Count', 'Context', 'other_Count', 'Color_other', 'total.visits')]
+car::scatterplotMatrix(batLR[c(1,3,5,7)])
+
 
 #1. LR vs LB array
-
 batarray1<-glm(cbind(ALB_Count,other_Count) ~ Context , family = binomial, data = battus.2[battus.2$Array_type == "LR",])
 summary(batarray1)
 
