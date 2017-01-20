@@ -2,6 +2,16 @@
 .Rhistory
 .Rapp.history
 
+# DS_Store
+.DS_Store
+
+# .csv (data) files
+*.csv
+
+# ms word
+*.docx
+*.doc
+
 # Session Data files
 .RData
 
