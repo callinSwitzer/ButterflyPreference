@@ -1,13 +1,28 @@
+# Callin Switzer
+# 20 Jan 2016
+# Update to previously written code by
+# Heather and Stuart
+
+# load packages:
+ipak <- function(pkg){
+     new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+     if(length(new.pkg)) install.packages(new.pkg, dependencies = TRUE)
+     sapply(pkg, require, character.only = TRUE)
+}
+
+packages <- c("ggplot2", "lme4", "car")
+ipak(packages)
+
+
+# Heather's update:
 #Update on "Stuart" analysis. January,16, 2017
-
-
-
 #Note: ALB is light blue. I put an A in front so that model would deliver preference in comparison to LB visits (alphabetical)
 #Same goes for the "context" ADvD. 
 
 #Data
 #I kept skippers and battus separate in these analyses because that way it was easier for me to isolate the array type I was interested in. 
 #I am also including the combined version here. 
+
 
 # Load data
 #battus
@@ -19,9 +34,6 @@ skip2 <- read.csv("skipper.2.csv", header=TRUE, sep=",", dec = ".")
 #combined data. Including this combined version but did not use it for the analyses below.
 all<-read.csv("Batt.skip.Stuart.csv",header=TRUE, sep=",", dec = ".")
 
-#Load Libraries
-library(lme4)
-
 
 #__________________________________________________________________
 #Battus
@@ -29,6 +41,18 @@ library(lme4)
 #1. LR vs LB array
 
 batarray1<-glm(cbind(ALB_Count,other_Count) ~ Context , family = binomial, data = battus.2[battus.2$Array_type == "LR",])
+summary(batarray1)
+
+# model diagnostics
+par(mfrow = c(2,3))
+plot(batarray1, which = 1:6)
+
+# deviance residuals
+plot(batarray1$fitted.values, residuals(batarray1, type="deviance"),
+     xlab="fitted probabilities",
+     ylab="deviance residuals")
+
+
 #Estimate Std. Error z value Pr(>|z|)    
 #(Intercept)      0.5162     0.1469   3.514 0.000441 ***
 #ContextDvCusp   -2.4941     0.2708  -9.211  < 2e-16 ***
