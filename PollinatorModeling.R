@@ -80,6 +80,14 @@ m1 <- glmer(cbind(visits.LB, visits.other) ~ context *  pol  *  array + (1 |polI
             family = binomial, control = glmerControl(optimizer = 'bobyqa'), data =  polDS )
 summary(m1)
 
+
+# check to see if we need to keep random effect
+m2 <- update(m1, .~. - (1|polID))
+anova(m1, m2) # keep random effect of polID
+
+m3 <- update(m1, .~. - (1|date))
+anova(m1, m3) # keep random effect of date
+
 # check for overdispersion
 overdisp_fun <- function(model) {
      ## number of variance parameters in 
@@ -96,19 +104,41 @@ overdisp_fun <- function(model) {
      c(chisq=Pearson.chisq,ratio=prat,rdf=rdf,p=pval)
 }
 
-overdisp_fun(m1) # double check this later
+overdisp_fun(m1) # looks like no evidence of overdispersion
 
+# here's another way to check for overdispersion
+residDev <- sum(residuals(m1, type = 'deviance')^2) # calculate residual deviance
+# this ratio should be about 1 -- larger than 1 suggests overdispersion
+residDev / df.residual(m1) 
+
+# check to see if we need to keep three way interaction
 m2 <- update(m1, .~.  - context :  pol  :  array)
 anova(m1, m2)
 
 
-# TO LOOK UP: can you drop a two-way interaction with a three way interaction
-# TO DO: interpret coefficients, and make contrasts for each of the six boxes
+# model diagnostics -- resudial vs. fitted values
+plot(m1) # no severe outliers
+
+# model diagnostics for random effects -- should be approx normally distributed
+qqnorm(resid(m1), main = "")
+qqline(resid(m1)) # not too bad
+
+# QQPlot for group-level effects -- ID
+qqnorm(ranef(m1)$polID[[1]], main="Normal Q-Q plot for random effects")
+qqline(ranef(m1)$polID[[1]])
+
+# QQPlot for group-level effects -- date
+qqnorm(ranef(m1)$date[[1]], main="Normal Q-Q plot for random effects")
+qqline(ranef(m1)$date[[1]]) 
+
+
+
 
 # hist((polDS$visits.other + polDS$visits.LB), xlim = c(0, 10), breaks = 30)
-
 # dataset with more than 2 total visits
 # dsGT2 <- polDS[(polDS$visits.other + polDS$visits.LB) > 2, ]
+
+# get predictions from model with 3-way interactions
 polDS$threeWayPreds <- predict(m1, type = 'response')
 
 
@@ -117,16 +147,14 @@ aa <- ggplot(polDS, aes(x = context, y = threeWayPreds, col = context)) +
      facet_grid( array~ pol )
 aa
 
-ggsave(filename = "polPrefPredictions.pdf", width = 11, height = 8)
+# ggsave(filename = "polPrefPredictions.pdf", width = 11, height = 8)
 
 
 table(polDS$array)
 
-polDS$array
 
-# TODO: find where the three way interactions are significant
-
-# creat new variable for three way interaction
+# creat new variable for three way interaction, which will allow us to use
+# post-hoc tests
 polDS$threeWay <- with(polDS, interaction(context, pol, array, sep = "x"))
 polDS$threeWay <- relevel(polDS$threeWay, ref = "DvDxSKIPxDark Blue")
 
@@ -136,8 +164,21 @@ m5 <- glmer(cbind(visits.LB, visits.other) ~ threeWay + (1|date) + (1|polID),
             family = binomial, data = polDS)
 summary(m5)
 
+# make sure m5 and m1 are the same
+# try to do contrasts with the model I 
+# artificially constructed the 3-way contrasts on
+summary(m1)
+summary(m5) # coefficients are different, because some reflevels are different
 
-# use multiple comparisons
+# same deviance
+deviance(m1)
+deviance(m5)
+
+# predictions are pretty much the same -- within 0.00001
+sum(abs(predict(m1) - predict(m5))  > 0.00001)
+
+
+# use m5 to calculate multiple comparisons
 l2 <- glht(m5, linfct = mcp(threeWay = "Tukey"))
 t1 <- summary(l2, test = adjusted(type = "none"))
 
@@ -187,36 +228,18 @@ plot(l2)
 dev.off()
 ?par
 
-# try to do contrasts with the model I 
-# artificially constructed the 3-way contrasts on
-summary(m1)
-summary(m5)
-
-# same deviance
-deviance(m1)
-deviance(m5)
-
-mm <- summary(m1)
-mm$residuals
-
-# see if m5 and m1 are the same
-data.frame(summary(m1)$coefficients[,1], summary(m5)$coefficients[,1])
-
-# predictions are pretty much the same
-sum(predict(m1) - predict(m5)  > 0.00001)
 
 # Next Steps: 
 # Make plot with raw data (weighted proportions w/ bootstrap CI's)
 # type out the interpretation of coefficients
-# model diagnostics
-# get a summary table of the contrasts we want
-# read -- see if we can test two-way interactions in the presence of a 3-way interaction
-# check to make sure the contrasts are right 
+# interpret coefficients
 
 
 # Done
 # Confirmed that the two 3-way interaction models are the same
-# made table of relevant contrasts
+# wrote table (.csv) of relevant contrasts
+# learned that if we have a 3-way interaction, we must also include all 2-way interactions 
+# I think we can't test two-way interactions in the presence of a 3-way interaction
 
 # how to calculate overdispersion for regular GLM
 # deviance(m1)/m1$df.residual # slightly overdispersed, but not too bad
