@@ -76,7 +76,8 @@ table(pol_DR$visits.other, pol_DR$pol)
 colnames(polDS)
 
 # full model
-m1 <- glmer(cbind(visits.LB, visits.other) ~ context *  pol  *  array + (1 |polID) + (1|date), family = binomial, control = glmerControl(optimizer = 'bobyqa'), data =  polDS )
+m1 <- glmer(cbind(visits.LB, visits.other) ~ context *  pol  *  array + (1 |polID) + (1|date), 
+            family = binomial, control = glmerControl(optimizer = 'bobyqa'), data =  polDS )
 summary(m1)
 
 # check for overdispersion
@@ -121,17 +122,60 @@ ggsave(filename = "polPrefPredictions.pdf", width = 11, height = 8)
 
 table(polDS$array)
 
-# TODO: find where the three way interactions
+polDS$array
 
+# TODO: find where the three way interactions are significant
+
+# creat new variable for three way interaction
 polDS$threeWay <- with(polDS, interaction(context, pol, array, sep = "x"))
-m5 <- update(m1, .~ + threeWay + (1|date) + (1|polID))
+polDS$threeWay <- relevel(polDS$threeWay, ref = "DvDxSKIPxDark Blue")
+
+# rerun the model with the new three-way interaction
+m5 <- glmer(cbind(visits.LB, visits.other) ~ threeWay + (1|date) + (1|polID), 
+            control = glmerControl(optimizer = 'bobyqa'),
+            family = binomial, data = polDS)
 summary(m5)
 
-nrow(summary(m5)$coefficients)
 
+# use multiple comparisons
 l2 <- glht(m5, linfct = mcp(threeWay = "Tukey"))
 t1 <- summary(l2, test = adjusted(type = "none"))
-write.table(t1, file = 'test.txt')
+
+
+# put summary of contrasts into dataframe
+contrastDF <- data.frame(estimate = t1$test$coefficients, se = t1$test$sigma, TStat = t1$test$tstat, pval = t1$test$pvalues)
+contrastDF
+
+# remove whitespace
+row.names(contrastDF) <- gsub(x = row.names(contrastDF), pattern = " ", replacement = "")
+
+gps <- t(as.data.frame(strsplit(x = row.names(contrastDF), split = '[x]|[-]')))
+row.names(gps) <- NULL
+
+cdf <- cbind(gps, contrastDF)
+colnames(cdf)[1:6] <- c("context1", "pol1", "array1", 'context2', 'pol2', 'array2')
+
+
+
+# subset contrast DF, so we get only the ones that interest us
+cdf <- cdf[as.character(cdf$array1) == as.character(cdf$array2) &
+                cdf$pol1 == cdf$pol2 , ]
+
+cdf <- cdf[order(cdf$pol1, cdf$array1), ]
+
+# remove extra columns
+cdf[, c("context1", "pol1", "array1", 'context2', 'pol2', 'array2')] <- NULL
+
+# round p-values for table
+cdf$pval <- round(cdf$pval, digits = 6)
+
+# write table to file
+# write.csv(cdf, file = "Contrasts.csv")
+
+
+
+
+
 
 
 par(mai = c(2,2,2,2))
@@ -143,19 +187,23 @@ plot(l2)
 dev.off()
 ?par
 
-# try to do contrasts
+# try to do contrasts with the model I 
+# artificially constructed the 3-way contrasts on
 summary(m1)
+summary(m5)
 
+# same deviance
+deviance(m1)
+deviance(m5)
 
-# difference between ses = 2 and ses =3 when female = 0
-K <- matrix(c(0, 0, 0, 1, -1, 0, 0, 0,0,0,0,0,0,0,0,0,0,0), nrow = 2)
-t <- glht(m1, linfct = K)
-plot(t)
-summary(t)
+mm <- summary(m1)
+mm$residuals
 
+# see if m5 and m1 are the same
+data.frame(summary(m1)$coefficients[,1], summary(m5)$coefficients[,1])
 
-# difference between 
-summary(m1)
+# predictions are pretty much the same
+sum(predict(m1) - predict(m5)  > 0.00001)
 
 # Next Steps: 
 # Make plot with raw data (weighted proportions w/ bootstrap CI's)
@@ -163,9 +211,15 @@ summary(m1)
 # model diagnostics
 # get a summary table of the contrasts we want
 # read -- see if we can test two-way interactions in the presence of a 3-way interaction
-# check to make sure the contrasts are right -- see if models are the same
+# check to make sure the contrasts are right 
 
-deviance(m1)/m1$df.residual # slightly overdispersed, but not too bad
+
+# Done
+# Confirmed that the two 3-way interaction models are the same
+# made table of relevant contrasts
+
+# how to calculate overdispersion for regular GLM
+# deviance(m1)/m1$df.residual # slightly overdispersed, but not too bad
 
 
 
