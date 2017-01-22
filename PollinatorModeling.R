@@ -15,7 +15,7 @@ ipak <- function(pkg){
      sapply(pkg, require, character.only = TRUE)
 }
 
-packages <- c("ggplot2", "lme4", "car", "multcomp")
+packages <- c("ggplot2", "lme4", "car", "multcomp", 'faraway', 'plyr')
 ipak(packages)
 
 
@@ -85,6 +85,8 @@ summary(m1)
 m2 <- update(m1, .~. - (1|polID))
 anova(m1, m2) # keep random effect of polID
 
+
+
 m3 <- update(m1, .~. - (1|date))
 anova(m1, m3) # keep random effect of date
 
@@ -114,6 +116,7 @@ residDev / df.residual(m1)
 # check to see if we need to keep three way interaction
 m2 <- update(m1, .~.  - context :  pol  :  array)
 anova(m1, m2)
+
 
 
 # model diagnostics -- resudial vs. fitted values
@@ -214,25 +217,139 @@ cdf$pval <- round(cdf$pval, digits = 6)
 # write.csv(cdf, file = "Contrasts.csv")
 
 
+# make plot with raw data and add SE's 
+
+# make new data frame for predictions and SE's
+pframe <- unique(polDS[, c('context', 'array', 'pol')])
+pframe$visits.LB <- 0
+pframe$visits.other <- 0
+
+pp <- predict(m1, newdata = pframe, re.form=NA) # re.form sets all random effects to 0
+
+
+### Example prediction
+mm <- model.matrix(terms(m1), pframe)
+pframe$probLightBlue <- predict(m1,pframe,re.form=NA)
+## or newdat$distance <- mm %*% fixef(fm1)
+pvar1 <- diag(mm %*% tcrossprod(vcov(m1),mm))
+
+# not sure if this is completely correct, 
+# but I think we should not use this method, anyway.
+tvar1 <- pvar1+VarCorr(m1)$polID[1] + VarCorr(m1)$date[1]  
+cmult <- 1.96 ## could use 1.96
+pframe <- data.frame(
+     pframe
+     , plo = pframe$probLightBlue-cmult*sqrt(pvar1)
+     , phi = pframe$probLightBlue+cmult*sqrt(pvar1)
+     , tlo = pframe$probLightBlue-cmult*sqrt(tvar1)
+     , thi = pframe$probLightBlue+cmult*sqrt(tvar1)
+)
+
+# convert to probability scale, instead of logit scale
+pframe[, 6:10] <- ilogit(pframe[, 6:10])
+
+
+#plot 95% confidence intervals
+g0 <- ggplot(pframe, aes(x=context, y=probLightBlue, colour=context))+geom_point()
+g0 + geom_errorbar(aes(ymin = plo, ymax = phi), width = 0.1)+
+     facet_grid( array~ pol ) + 
+     labs(title="CI based on fixed-effects uncertainty ONLY")
+
+#plot prediction intervals (including info from random effects)
+g0 + geom_errorbar(aes(ymin = tlo, ymax = thi))+
+     facet_grid( array~ pol ) + 
+     labs(title="CI based on FE uncertainty + RE variance")
+
+
+# try weighted bootstrap CI's
+polDS$percentLB <- polDS$visits.LB / (polDS$visits.LB + polDS$visits.other)
+polDS$total.visits <- (polDS$visits.LB + polDS$visits.other)
+
+# check calculations for weighted mean
+pchk <- polDS[polDS$context == polDS$context[1] & polDS$array == polDS$array[1] & polDS$pol == polDS$pol[1],]
+
+# looks correct (compared to lm, below)
+weighted.mean(pchk$percentLB, w = pchk$total.visits  / max(polDS$total.visits))
+
+# calculate mean percent of light blue visits in each group
+# get Bootstrap CI's to see how they compare to the CI's above
+meanPercents <- function(o){
+     mod1 <- lm(percentLB ~ array * context * pol, 
+                weights = total.visits, 
+                data = polDS[sample(1:nrow(polDS), replace = TRUE), ]) # bootstrap sample
+     preds = predict(mod1, newdata = pframe[, 1:3])
+     return(preds)
+}
+
+system.time({ # takes about 50 seconds for 10000 replications
+     BS_preds <- replicate(n = 10000, meanPercents())
+})
+
+
+# get bootstrap means and 95% CI
+bs_DF <- data.frame(pframe[,1:3], 
+                    probLightBlue = rowMeans(BS_preds), 
+                    t(apply(X = BS_preds, MARGIN = 1, 
+                            FUN = function(x) quantile(x,probs = c(0.025, 0.975)))))
+
+# plot BS CI's
+g1 <- ggplot(bs_DF, aes(x=context, y=probLightBlue, colour=context))+geom_point()
+g1 + geom_errorbar(aes(ymin = X2.5., ymax = X97.5.), width = 0.1)+
+     facet_grid( array~ pol ) + 
+     labs(title="CI based on Bootstrap")
+
+
+# compare the two methods
+bs_DF$method = "BootStrap"
+pframe$method = "Normal Approx"
+
+colnames(pframe)[7:8] <- c("X2.5.", 'X97.5.')
+
+combDF <- rbind(bs_DF, pframe[, colnames(pframe) %in% colnames(bs_DF)])
+
+g2 <- ggplot(combDF, aes(x=context, y=probLightBlue, colour=method))+ 
+     geom_point(position = position_dodge(width = 0.3)) + 
+     geom_errorbar(aes(ymin = X2.5., ymax = X97.5.), position = position_dodge(width = 0.3), width = 0.1)+
+     facet_grid( array~ pol ) + 
+     labs(title="CI based on Bootstrap vs. Normal Approx")
+g2
+
+
+# make a better plot, with all text written out, possibly for publication 
+# though it still needs a little help from Adobe Illustrator
+
+pframe_pub <- pframe[, c(1:3, 6:8)]
+
+pframe_pub <- within(pframe_pub, {
+     pollinator <- mapvalues(pol, from = c("SKIP", "BAT"), to = c("Hesperiidae spp.", "Battus spp."))
+     context <- mapvalues(context, from = c('DvDwC', 'DvD', 'CvD'), to = c(
+          "P. drummondii vs. P. drummondii \n with P. cuspidata in background", 
+          "P. drummondii vs. P. drummondii \n without P. cuspidata in background", 
+          "P. drummondii vs. P. cuspidata"))
+})
 
 
 
 
+#quartz()
+g_pub <- ggplot(pframe_pub, aes(x=context, y=probLightBlue, colour=context))+ 
+     geom_point() + 
+     geom_errorbar(aes(ymin = X2.5., ymax = X97.5.), width = 0.1)+
+     facet_grid( array~ pollinator, labeller = label_both ) + 
+     theme(legend.position =  "none", 
+           panel.background = element_rect(fill = NA, color = "black"), 
+           axis.text.x = element_text(angle = 45, vjust = .9, hjust = .9)) + 
+     labs(x = "Context", y = "Probability of visiting \n light blue flowers")
+g_pub
 
-par(mai = c(2,2,2,2))
-x11()
-graphics.off()
-pdf("bigContrasts.pdf", width= 11, height = 70)
-par(mai = c(1,5,1,1))
-plot(l2)
-dev.off()
-?par
-
+ggsave(g_pub, filename = 'PolPref_95CI_NormalApprox.pdf', width = 8, height = 6)
 
 # Next Steps: 
-# Make plot with raw data (weighted proportions w/ bootstrap CI's)
 # type out the interpretation of coefficients
 # interpret coefficients
+
+
+
 
 
 # Done
