@@ -80,6 +80,14 @@ m1 <- glmer(cbind(visits.LB, visits.other) ~ context *  pol  *  array + (1 |polI
             family = binomial, control = glmerControl(optimizer = 'bobyqa'), data =  polDS )
 summary(m1)
 
+## interpret coefficients
+#  The reference levels are SKIP, DvD, and Dark Blue, so everything should be 
+#  Interpreted relative to those things.
+#  
+# The coef for contextCvD is -1.11658.  This means that 
+
+
+
 
 # check to see if we need to keep random effect
 m2 <- update(m1, .~. - (1|polID))
@@ -342,7 +350,7 @@ g_pub <- ggplot(pframe_pub, aes(x=context, y=probLightBlue, colour=context))+
      labs(x = "Context", y = "Probability of visiting \n light blue flowers")
 g_pub
 
-ggsave(g_pub, filename = 'PolPref_95CI_NormalApprox.pdf', width = 8, height = 6)
+#ggsave(g_pub, filename = 'PolPref_95CI_NormalApprox.pdf', width = 8, height = 6)
 
 # Next Steps: 
 # type out the interpretation of coefficients
@@ -357,6 +365,8 @@ ggsave(g_pub, filename = 'PolPref_95CI_NormalApprox.pdf', width = 8, height = 6)
 # wrote table (.csv) of relevant contrasts
 # learned that if we have a 3-way interaction, we must also include all 2-way interactions 
 # I think we can't test two-way interactions in the presence of a 3-way interaction
+# made a plot with means and 95% CI's based on fixed effects only
+## this plot is quite similar to the 95% CI's from bootstrapped, weighted means
 
 # how to calculate overdispersion for regular GLM
 # deviance(m1)/m1$df.residual # slightly overdispersed, but not too bad
