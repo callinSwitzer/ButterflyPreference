@@ -1,0 +1,388 @@
+---
+title: "Butterfly Pollinator Preference"
+author: "Callin Switzer"
+date: "23 Jan 2017"
+output:
+  html_document: default
+  pdf_document:
+    fig_height: 5
+    fig_width: 7
+    highlight: monochrome
+---
+
+\begin{verbatim}
+# Questions that we want to ask
+# 1)	Is there preference for color (lb vs dr, lb vs db, lb vs lr)?
+# 2)	Does the preference for color change with context of array (drum vs drum, drum vs drum with cusp, cusp vs. drum)?
+# 3)	Do the two pollinators vary in their preferences? 
+\end{verbatim}
+
+
+### Setup
+```{r, setup}
+# load packages:
+ipak <- function(pkg){
+     new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+     if(length(new.pkg)) install.packages(new.pkg, dependencies = TRUE)
+     sapply(pkg, require, character.only = TRUE)
+}
+
+packages <- c("ggplot2", "lme4", "car", "multcomp", 'faraway', 'plyr')
+ipak(packages)
+
+# set ggplot theme
+theme_set(theme_classic())
+
+
+polDS <- read.csv('PollinatorShortFormat.csv')
+colnames(polDS)
+
+# drop Light blue vs. Cusp
+polDS <- droplevels(polDS[polDS$array != "Light Blue",])
+
+# write.csv(x = polDS, "PollShortFormat_NoLB.csv", row.names = FALSE)
+
+# change reference levels
+polDS$context <- relevel(polDS$context, ref = "DvD")
+polDS$pol <- relevel(polDS$pol, ref = "SKIP")
+```
+
+
+### Preliminary models with subset of data
+```{r}
+# mod1
+pol_DR <- polDS[polDS$array == 'Dark Blue', ]
+m1 <- glmer(cbind(visits.LB, visits.other) ~ context *  pol + (1|polID), family = binomial, pol_DR )
+summary(m1)
+
+m2 <- update(m1, .~. - context :  pol)
+summary(m2)
+
+anova(m1, m2)
+
+# make new columns in data frame 
+pol_DR$pref <- pol_DR$visits.LB / (pol_DR$visits.LB + pol_DR$visits.other)
+pol_DR$totalVisits <- (pol_DR$visits.LB + pol_DR$visits.other)
+
+
+
+ggplot(pol_DR, aes(x = pol, y = pref)) + 
+     geom_boxplot() + 
+     facet_wrap(~context) + 
+     geom_point(position = position_jitter())
+
+lm1 <- lm(pref ~ pol * context, weights =totalVisits, data = pol_DR) 
+summary(lm1)
+
+pol_DR$predictions = predict(lm1)
+
+ggplot(pol_DR, aes(x = pol, y = predictions)) + 
+     geom_boxplot() + 
+     facet_wrap(~context)
+
+ggplot(pol_DR, aes(x = context, y = predictions, col = context)) + 
+     geom_boxplot() + 
+     facet_wrap(~pol)
+```
+
+
+
+### Full model with all data
+```{r}
+# full model
+m1 <- glmer(cbind(visits.LB, visits.other) ~ context *  pol  *  array + (1 |polID) + (1|date), 
+            family = binomial, control = glmerControl(optimizer = 'bobyqa'), data =  polDS )
+summary(m1)
+
+
+
+## interpret coefficients
+#  The reference levels are SKIP, DvD, and Dark Blue, so everything should be 
+#  Interpreted relative to those things.
+#  
+# The coef for contextCvD is -1.11658.  This means that 
+
+
+
+
+# check to see if we need to keep random effects
+# these tests may not be very accurate, but
+# the random effects are not our main interest, anyway
+
+m2 <- update(m1, .~. - (1|polID))
+anova(m1, m2) # keep random effect of polID
+
+m3 <- update(m1, .~. - (1|date))
+anova(m1, m3) # keep random effect of date
+
+# check to see if we need to keep three way interaction
+m2 <- update(m1, .~.  - context :  pol  :  array)
+anova(m1, m2) #keep 3-way int
+```
+
+
+
+### Model Diatnostics
+```{r}
+# check for overdispersion
+overdisp_fun <- function(model) {
+     ## number of variance parameters in 
+     ##   an n-by-n variance-covariance matrix
+     vpars <- function(m) {
+          nrow(m)*(nrow(m)+1)/2
+     }
+     model.df <- sum(sapply(VarCorr(model),vpars))+length(fixef(model))
+     rdf <- nrow(model.frame(model))-model.df
+     rp <- residuals(model,type="pearson")
+     Pearson.chisq <- sum(rp^2)
+     prat <- Pearson.chisq/rdf
+     pval <- pchisq(Pearson.chisq, df=rdf, lower.tail=FALSE)
+     c(chisq=Pearson.chisq,ratio=prat,rdf=rdf,p=pval)
+}
+
+overdisp_fun(m1) # looks like no evidence of overdispersion
+
+# here's another way to check for overdispersion
+residDev <- sum(residuals(m1, type = 'deviance')^2) # calculate residual deviance
+# this ratio should be about 1 -- larger than 1 suggests overdispersion
+residDev / df.residual(m1) 
+
+# model diagnostics -- resudial vs. fitted values
+plot(m1) # no severe outliers
+
+# model diagnostics for residuals -- should be approx normally distributed
+qqnorm(resid(m1), main = "")
+qqline(resid(m1)) # not too bad
+
+# QQPlot for group-level effects -- ID
+qqnorm(ranef(m1)$polID[[1]], main="Normal Q-Q plot for random effects")
+qqline(ranef(m1)$polID[[1]])
+
+# QQPlot for group-level effects -- date
+qqnorm(ranef(m1)$date[[1]], main="Normal Q-Q plot for random effects")
+qqline(ranef(m1)$date[[1]]) 
+```
+
+
+### Get means and CI's for each group
+```{r}
+# hist((polDS$visits.other + polDS$visits.LB), xlim = c(0, 10), breaks = 30)
+# dataset with more than 2 total visits
+# dsGT2 <- polDS[(polDS$visits.other + polDS$visits.LB) > 2, ]
+
+# get predictions from model with 3-way interactions, which 
+# also uses information from random effects
+polDS$threeWayPreds <- predict(m1, type = 'response')
+
+
+aa <- ggplot(polDS, aes(x = context, y = threeWayPreds, col = context)) + 
+     geom_boxplot() + 
+     facet_grid( array~ pol )
+aa
+
+# ggsave(filename = "polPrefPredictions.pdf", width = 11, height = 8)
+```
+
+
+### Test pairwise contrasts
+```{r}
+
+# creat new variable for three way interaction, which will allow us to use
+# post-hoc tests
+polDS$threeWay <- with(polDS, interaction(context, pol, array, sep = "x"))
+polDS$threeWay <- relevel(polDS$threeWay, ref = "DvDxSKIPxDark Blue")
+
+# rerun the model with the new three-way interaction
+m5 <- glmer(cbind(visits.LB, visits.other) ~ threeWay + (1|date) + (1|polID), 
+            control = glmerControl(optimizer = 'bobyqa'),
+            family = binomial, data = polDS)
+summary(m5)
+
+# make sure m5 and m1 are the same
+# try to do contrasts with the model I 
+# artificially constructed the 3-way contrasts on
+summary(m1)
+summary(m5) # coefficients are different, because some reflevels are different
+
+# same deviance
+deviance(m1)
+deviance(m5)
+
+# predictions are pretty much the same -- within 0.00001
+sum(abs(predict(m1) - predict(m5))  > 0.00001)
+
+
+# use m5 to calculate multiple comparisons
+l2 <- glht(m5, linfct = mcp(threeWay = "Tukey"))
+t1 <- summary(l2, test = adjusted(type = "none"))
+
+
+# put summary of contrasts into dataframe
+contrastDF <- data.frame(estimate = t1$test$coefficients, se = t1$test$sigma, TStat = t1$test$tstat, pval = t1$test$pvalues)
+contrastDF
+
+# remove whitespace
+row.names(contrastDF) <- gsub(x = row.names(contrastDF), pattern = " ", replacement = "")
+
+gps <- t(as.data.frame(strsplit(x = row.names(contrastDF), split = '[x]|[-]')))
+row.names(gps) <- NULL
+
+cdf <- cbind(gps, contrastDF)
+colnames(cdf)[1:6] <- c("context1", "pol1", "array1", 'context2', 'pol2', 'array2')
+
+# subset contrast DF, so we get only the ones that interest us
+cdf <- cdf[as.character(cdf$array1) == as.character(cdf$array2) &
+                cdf$pol1 == cdf$pol2 , ]
+
+cdf <- cdf[order(cdf$pol1, cdf$array1), ]
+
+# remove extra columns
+cdf[, c("context1", "pol1", "array1", 'context2', 'pol2', 'array2')] <- NULL
+
+# round p-values for table
+cdf$pval <- round(cdf$pval, digits = 6)
+
+# write table to file
+# write.csv(cdf, file = "Contrasts.csv")
+```
+
+### make plot with group means and 95% CI's
+```{r}
+# make new data frame for predictions and SE's
+pframe <- unique(polDS[, c('context', 'array', 'pol')])
+pframe$visits.LB <- 0
+pframe$visits.other <- 0
+
+pp <- predict(m1, newdata = pframe, re.form=NA) # re.form sets all random effects to 0
+
+
+### Example prediction
+mm <- model.matrix(terms(m1), pframe)
+pframe$probLightBlue <- predict(m1,pframe,re.form=NA)
+## or newdat$distance <- mm %*% fixef(fm1)
+pvar1 <- diag(mm %*% tcrossprod(vcov(m1),mm))
+
+# not sure if this is completely correct, 
+# but I think we should not use this method, anyway.
+tvar1 <- pvar1+VarCorr(m1)$polID[1] + VarCorr(m1)$date[1]  
+cmult <- 1.96 ## could use 1.96
+pframe <- data.frame(
+     pframe
+     , plo = pframe$probLightBlue-cmult*sqrt(pvar1)
+     , phi = pframe$probLightBlue+cmult*sqrt(pvar1)
+     , tlo = pframe$probLightBlue-cmult*sqrt(tvar1)
+     , thi = pframe$probLightBlue+cmult*sqrt(tvar1)
+)
+
+# convert to probability scale, instead of logit scale
+pframe[, 6:10] <- ilogit(pframe[, 6:10])
+
+
+#plot 95% confidence intervals
+g0 <- ggplot(pframe, aes(x=context, y=probLightBlue, colour=context))+geom_point()
+g0 + geom_errorbar(aes(ymin = plo, ymax = phi), width = 0.1)+
+     facet_grid( array~ pol ) + 
+     labs(title="CI based on fixed-effects uncertainty ONLY")
+
+#plot prediction intervals (including info from random effects)
+g0 + geom_errorbar(aes(ymin = tlo, ymax = thi))+
+     facet_grid( array~ pol ) + 
+     labs(title="CI based on FE uncertainty + RE variance")
+
+
+# Compare weighted bootstrap CI's
+polDS$percentLB <- polDS$visits.LB / (polDS$visits.LB + polDS$visits.other)
+polDS$total.visits <- (polDS$visits.LB + polDS$visits.other)
+
+# check calculations for weighted mean
+pchk <- polDS[polDS$context == polDS$context[1] & polDS$array == polDS$array[1] & polDS$pol == polDS$pol[1],]
+
+# looks correct (compared to lm, below)
+weighted.mean(pchk$percentLB, w = pchk$total.visits  / max(polDS$total.visits))
+
+# calculate mean percent of light blue visits in each group
+# get Bootstrap CI's to see how they compare to the CI's above
+meanPercents <- function(o){
+     mod1 <- lm(percentLB ~ array * context * pol, 
+                weights = total.visits, 
+                data = polDS[sample(1:nrow(polDS), replace = TRUE), ]) # bootstrap sample
+     preds = predict(mod1, newdata = pframe[, 1:3])
+     return(preds)
+}
+
+system.time({ # takes about 50 seconds for 10000 replications
+     BS_preds <- replicate(n = 10000, meanPercents())
+})
+
+
+# get bootstrap means and 95% CI
+bs_DF <- data.frame(pframe[,1:3], 
+                    probLightBlue = rowMeans(BS_preds), 
+                    t(apply(X = BS_preds, MARGIN = 1, 
+                            FUN = function(x) quantile(x,probs = c(0.025, 0.975)))))
+
+# plot BS CI's
+g1 <- ggplot(bs_DF, aes(x=context, y=probLightBlue, colour=context))+geom_point()
+g1 + geom_errorbar(aes(ymin = X2.5., ymax = X97.5.), width = 0.1)+
+     facet_grid( array~ pol ) + 
+     labs(title="CI based on Bootstrap")
+
+
+# compare the two methods
+bs_DF$method = "BootStrap"
+pframe$method = "Normal Approx"
+
+colnames(pframe)[7:8] <- c("X2.5.", 'X97.5.')
+
+combDF <- rbind(bs_DF, pframe[, colnames(pframe) %in% colnames(bs_DF)])
+
+g2 <- ggplot(combDF, aes(x=context, y=probLightBlue, colour=method))+ 
+     geom_point(position = position_dodge(width = 0.3)) + 
+     geom_errorbar(aes(ymin = X2.5., ymax = X97.5.), position = position_dodge(width = 0.3), width = 0.1)+
+     facet_grid( array~ pol ) + 
+     labs(title="CI based on Bootstrap vs. Normal Approx")
+g2
+
+
+# make a better plot, with all text written out, possibly for publication 
+# though it still needs a little help from Adobe Illustrator
+
+pframe_pub <- pframe[, c(1:3, 6:8)]
+
+pframe_pub <- within(pframe_pub, {
+     pollinator <- mapvalues(pol, from = c("SKIP", "BAT"), to = c("Hesperiidae spp.", "Battus spp."))
+     context <- mapvalues(context, from = c('DvDwC', 'DvD', 'CvD'), to = c(
+          "P. drummondii vs. P. drummondii \n with P. cuspidata in background", 
+          "P. drummondii vs. P. drummondii \n without P. cuspidata in background", 
+          "P. drummondii vs. P. cuspidata"))
+})
+
+
+
+
+#quartz()
+g_pub <- ggplot(pframe_pub, aes(x=context, y=probLightBlue, colour=context))+ 
+     geom_point() + 
+     geom_errorbar(aes(ymin = X2.5., ymax = X97.5.), width = 0.1)+
+     facet_grid( array~ pollinator, labeller = label_both ) + 
+     theme(legend.position =  "none", 
+           panel.background = element_rect(fill = NA, color = "black"), 
+           axis.text.x = element_text(angle = 45, vjust = .9, hjust = .9)) + 
+     labs(x = "Context", y = "Probability of visiting \n light blue flowers")
+g_pub
+
+#ggsave(g_pub, filename = 'PolPref_95CI_NormalApprox.pdf', width = 8, height = 6)
+```
+
+
+# Done Jan 23
+# Confirmed that the two 3-way interaction models are the same
+# wrote table (.csv and .txt) of relevant contrasts (without correcting for multiple comparisons)
+# learned that if we have a 3-way interaction, we must also include all 2-way interactions 
+# I think we can't test two-way interactions in the presence of a 3-way interaction
+# made a plot with means and 95% CI's based on fixed effects only
+## this plot is quite similar to the 95% CI's from bootstrapped, weighted means
+# typed out the interpretation of coefficients
+
+
+
