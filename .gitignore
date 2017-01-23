@@ -12,6 +12,9 @@
 *.Rproj
 
 
+# specific files
+battus.skip.updated.7.22.pdf
+
 # ms word
 *.docx
 *.doc

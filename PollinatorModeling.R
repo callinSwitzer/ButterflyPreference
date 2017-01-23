@@ -80,6 +80,8 @@ m1 <- glmer(cbind(visits.LB, visits.other) ~ context *  pol  *  array + (1 |polI
             family = binomial, control = glmerControl(optimizer = 'bobyqa'), data =  polDS )
 summary(m1)
 
+
+
 ## interpret coefficients
 #  The reference levels are SKIP, DvD, and Dark Blue, so everything should be 
 #  Interpreted relative to those things.
@@ -352,21 +354,14 @@ g_pub
 
 #ggsave(g_pub, filename = 'PolPref_95CI_NormalApprox.pdf', width = 8, height = 6)
 
-# Next Steps: 
-# type out the interpretation of coefficients
-# interpret coefficients
-
-
-
-
-
-# Done
+# Done Jan 23
 # Confirmed that the two 3-way interaction models are the same
-# wrote table (.csv) of relevant contrasts
+# wrote table (.csv) of relevant contrasts (without correcting for multiple comparisons)
 # learned that if we have a 3-way interaction, we must also include all 2-way interactions 
 # I think we can't test two-way interactions in the presence of a 3-way interaction
 # made a plot with means and 95% CI's based on fixed effects only
 ## this plot is quite similar to the 95% CI's from bootstrapped, weighted means
+# typed out the interpretation of coefficients
 
 # how to calculate overdispersion for regular GLM
 # deviance(m1)/m1$df.residual # slightly overdispersed, but not too bad
