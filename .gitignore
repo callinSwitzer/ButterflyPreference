@@ -11,6 +11,10 @@
 # R project file
 *.Rproj
 
+# latex file
+*.aux
+*.log
+*.gz
 
 # specific files
 battus.skip.updated.7.22.pdf
