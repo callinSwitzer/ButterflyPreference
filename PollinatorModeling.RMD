@@ -242,7 +242,7 @@ cdf2 <- cdf[as.character(cdf$array1) == as.character(cdf$array2) &
 
 cdf2 <- cdf2[order(cdf2$context1, cdf2$array1, cdf2$context2), ]
 cdf2$pval <- round(cdf2$pval, digits = 6) # round p-val for table
-# write.csv(cdf2, file = "Contrasts_battVSkip.csv")
+write.csv(cdf2, file = "Contrasts_battVSkip.txt")
 
 
 cdf <- cdf[as.character(cdf$array1) == as.character(cdf$array2) &
@@ -260,7 +260,7 @@ cdf[, c("context1", "pol1", "array1", 'context2', 'pol2', 'array2')] <- NULL
 cdf$pval <- round(cdf$pval, digits = 6)
 
 # write table to file
-# write.csv(cdf, file = "Contrasts.csv")
+# write.csv(cdf, file = "Contrasts.txt")
 ```
 
 ### make plot with group means and 95% CI's
