@@ -1,7 +1,7 @@
 ---
 title: "Butterfly Pollinator Preference"
 author: "Callin Switzer"
-date: "23 Jan 2017, Update 27 Jan"
+date: "23 Jan 2017, Update 27 Jan, Update 4 Feb"
 output:
   html_document: default
   pdf_document:
@@ -15,11 +15,17 @@ output:
 # 1)	Is there preference for color (lb vs dr, lb vs db, lb vs lr)?
 # 2)	Does the preference for color change with context of array (drum vs drum, drum vs drum with cusp, cusp vs. drum)?
 # 3)	Do the two pollinators vary in their preferences? 
+
+# New Additions:
+1.) New contrasts that compare battus vs. skipper
+2.) Several new ways of visualizing the data
 \end{verbatim}
 
 
+
+
 ### Setup
-```{r, setup}
+```{r, warning=FALSE, message= FALSE}
 # load packages:
 ipak <- function(pkg){
      new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
@@ -231,8 +237,19 @@ cdf <- cbind(gps, contrastDF)
 colnames(cdf)[1:6] <- c("context1", "pol1", "array1", 'context2', 'pol2', 'array2')
 
 # subset contrast DF, so we get only the ones that interest us
+cdf2 <- cdf[as.character(cdf$array1) == as.character(cdf$array2) & 
+                 cdf$pol1 != cdf$pol2 , ]
+
+cdf2 <- cdf2[order(cdf2$context1, cdf2$array1, cdf2$context2), ]
+cdf2$pval <- round(cdf2$pval, digits = 6) # round p-val for table
+# write.csv(cdf2, file = "Contrasts_battVSkip.csv")
+
+
 cdf <- cdf[as.character(cdf$array1) == as.character(cdf$array2) &
                 cdf$pol1 == cdf$pol2 , ]
+
+
+
 
 cdf <- cdf[order(cdf$pol1, cdf$array1), ]
 
@@ -351,7 +368,7 @@ pframe_pub <- pframe[, c(1:3, 6:8)]
 
 pframe_pub <- within(pframe_pub, {
      pollinator <- mapvalues(pol, from = c("SKIP", "BAT"), to = c("Hesperiidae spp.", "Battus spp."))
-     context <- mapvalues(context, from = c('DvDwC', 'DvD', 'CvD'), to = c(
+     context1 <- mapvalues(context, from = c('DvDwC', 'DvD', 'CvD'), to = c(
           "P. drummondii vs. P. drummondii \n with P. cuspidata in background", 
           "P. drummondii vs. P. drummondii \n without P. cuspidata in background", 
           "P. drummondii vs. P. cuspidata"))
@@ -372,6 +389,33 @@ g_pub <- ggplot(pframe_pub, aes(x=context, y=probLightBlue, colour=context))+
 g_pub
 
 #ggsave(g_pub, filename = 'PolPref_95CI_NormalApprox.pdf', width = 8, height = 6)
+
+
+# make another arrangement of the graph
+ 
+g_pub2 <- ggplot(pframe_pub, aes(x=pol, y=probLightBlue, colour=context))+ 
+     geom_point(position = position_dodge(width = 0.4)) + 
+     geom_errorbar(aes(ymin = X2.5., ymax = X97.5.), width = 0.1, position = position_dodge(width = 0.4))+
+     facet_grid(~ array, labeller = label_both ) + 
+     theme(legend.position =  "top", 
+           panel.background = element_rect(fill = NA, color = "black"), 
+           axis.text.x = element_text(angle = 45, vjust = .9, hjust = .9)) + 
+     labs(x = "Pollinator", y = "Probability of visiting \n light blue flowers")
+g_pub2
+ggsave(g_pub2, filename = 'PolPref_95CI_NormalApprox_2.pdf', width = 8, height = 6)
+
+
+
+g_pub3 <- ggplot(pframe_pub, aes(x=context, y=probLightBlue, colour=pol))+ 
+     geom_point(position = position_dodge(width = 0.4)) + 
+     geom_errorbar(aes(ymin = X2.5., ymax = X97.5.), width = 0.1, position = position_dodge(width = 0.4))+
+     facet_grid(~ array, labeller = label_both ) + 
+     theme(legend.position =  "top", 
+           panel.background = element_rect(fill = NA, color = "black"), 
+           axis.text.x = element_text(angle = 45, vjust = .9, hjust = .9)) + 
+     labs(x = "Context", y = "Probability of visiting \n light blue flowers")
+g_pub3
+ggsave(g_pub3, filename = 'PolPref_95CI_NormalApprox_3.pdf', width = 8, height = 6)
 ```
 
 
